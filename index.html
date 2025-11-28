@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ENNER-CRAFT CALCULATOR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Tailwind CSS の設定 */
+        :root {
+            --lp-display-font: 2.8rem; /* LPのフォントサイズを少し小さく */
+        }
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+            background-color: #ffffff; 
+            color: #333333;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        /* Excelセル配置を再現するためのグリッドコンテナ */
+        #calculator-grid {
+            display: grid;
+            /* 4列 (A, B, C, D) の均等幅 */
+            grid-template-columns: repeat(4, 1fr); 
+            /* 12行 (1-12) に縮小 */
+            grid-template-rows: repeat(12, minmax(45px, auto)); 
+            gap: 8px; /* グリッドのギャップ */
+            max-width: 400px; /* 最大幅を少し狭める */
+            width: 100%;
+            padding: 12px;
+            border-radius: 12px;
+            background-color: #f0f0f5; 
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* ------------------------------------
+           デュエルモード要素のスタイル
+           ------------------------------------ */
+        
+        /* LP表示エリアの基本スタイル */
+        .lp-display {
+            display: flex;
+            flex-direction: column; /* 縦並びにしてラベルを追加 */
+            align-items: center;
+            justify-content: center;
+            font-size: var(--lp-display-font);
+            font-weight: 900;
+            border-radius: 8px;
+            height: 100%;
+            cursor: pointer; /* クリック可能にする */
+            background-color: #ffffff; 
+        }
+        .lp-display:hover {
+            box-shadow: 0 0 5px rgba(0, 0, 255, 0.5);
+        }
+        
+        /* LPラベルのスタイル */
+        .lp-label {
+            font-size: 0.8rem; /* ラベルのフォントサイズを小さく */
+            font-weight: 700;
+            margin-bottom: 5px;
+            color: #374151; 
+        }
+
+        /* 変数C, D 表示エリアの基本スタイル */
+        .counter-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            font-weight: 600;
+            padding: 5px;
+            border-radius: 6px;
+            background-color: #e0e0e8;
+            text-align: center;
+            line-height: 1.2;
+        }
+        .counter-value {
+            font-size: 2rem; 
+            font-weight: 900;
+            line-height: 1;
+        }
+
+        /* ------------------------------------
+           ボタンの基本スタイル
+           ------------------------------------ */
+        .calc-button {
+            display: flex;
+            flex-direction: column; /* 複数行対応のため */
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem; 
+            font-weight: 700;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.3s, background-color 0.3s;
+            height: 100%;
+            line-height: 1.2;
+            text-align: center;
+            color: #1f2937; 
+        }
+        .calc-button:hover:not(:disabled) {
+            transform: scale(0.98);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        /* P効果ボタンのビビッドな色 */
+        .btn-e { background-color: #f87171; }
+        .btn-f { background-color: #fbbf24; }
+        .btn-g { background-color: #60a5fa; }
+        .btn-h { background-color: #34d399; }
+        /* 使用済みP効果ボタンの色を薄くする */
+        .disabled-effect { 
+            opacity: 0.6;
+            cursor: default !important;
+        }
+        
+        /* === ゲーム終了時の非活性スタイル === */
+        .btn-game-end {
+            opacity: 0.3; 
+            cursor: default !important;
+            box-shadow: none !important;
+            transform: none !important;
+        }
+
+        /* ボタンN (ENNER-POLIS) の動的スタイル */
+        .btn-enipoli-fire { background-color: #ef4444; color: white; } 
+        .btn-enipoli-dim { background-color: #4ade80; color: white; } 
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .blinking {
+            animation: pulse-red 1s infinite;
+        }
+        
+        /* ------------------------------------
+           電卓モード要素のスタイル
+           ------------------------------------ */
+        /* LP表示エリアの配置はJavaScriptで動的に設定されます (A3-B5 または C3-D5) */
+        
+        .calc-var-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background-color: #e0e0e8; 
+            height: 100%;
+            color: #1f2937; 
+            padding: 10px;
+        }
+        
+        /* 電卓変数A2 (演算子): A6-A7 に変更 */
+        #calc-varA2 { 
+            grid-area: 6 / 1 / 8 / 2; /* 6行目 / 1列目 / 8行目 / 2列目 */
+            font-size: 2.5rem; 
+            font-weight: 700;
+        }
+        
+        /* 電卓変数A3 (入力値): B6-D7 に変更 - 縦横中央揃え */
+        #calc-varA3 {
+            grid-area: 6 / 2 / 8 / 5; /* 6行目 / 2列目 / 8行目 / 5列目 */
+            font-size: 3rem; 
+            font-weight: 900;
+            overflow: hidden; 
+            justify-content: center; /* 中央揃え */
+            align-items: center;    /* 縦方向の中央揃え */
+            text-align: center;     /* テキストも中央揃えに */
+        }
+
+        /* 電卓ボタンの色の定義 */
+        .btn-calc-white { background-color: #f5f5f5; color: #333; }
+        .btn-calc-orange { background-color: #ff9800; color: white; } 
+        .btn-calc-blue { background-color: #2196f3; color: white; } 
+
+        /* ------------------------------------
+           グリッド配置 (共通 & 上書き) 
+           ------------------------------------ */
+        
+        /* スペーサー (1行目のみ) - 常時表示 */
+        #spacer-top { grid-area: 1 / 1 / 2 / 5; }
+
+        /* デュエルモードの基本配置 */
+        #varA-container { grid-area: 2 / 1 / 5 / 3; } /* 2行目から5行目まで (3行スパン) */
+        #varB-container { grid-area: 2 / 3 / 5 / 5; } /* 2行目から5行目まで (3行スパン) */
+        #varC-container { grid-area: 5 / 1 / 6 / 3; } /* 5行目 (1行スパン) */
+        #varD-container { grid-area: 5 / 3 / 6 / 5; } /* 5行目 (1行スパン) */
+        
+        /* P効果ボタン E, F, G, H (2行スパン: 6/1 - 8/5) */
+        #btnE { grid-area: 6 / 1 / 8 / 2; } 
+        #btnF { grid-area: 6 / 2 / 8 / 3; } 
+        #btnG { grid-area: 6 / 3 / 8 / 4; } 
+        #btnH { grid-area: 6 / 4 / 8 / 5; } 
+
+        /* 以下、全て1行上にシフトした配置 */
+        #btnP { grid-area: 8 / 1 / 10 / 2; } /* 8行目から10行目まで (2行スパン) */
+        #btnR { grid-area: 10 / 1 / 11 / 2; } /* 10行目 (1行スパン) */
+        #btnM { grid-area: 8 / 2 / 9 / 4; } /* 8行目 (1行スパン) */
+        #btnN { grid-area: 9 / 2 / 11 / 4; } /* 9行目から11行目まで (2行スパン) */
+        #btnQ { grid-area: 8 / 4 / 10 / 5; } /* 8行目から10行目まで (2行スパン) */
+        #btnS { grid-area: 10 / 4 / 11 / 5; } /* 10行目 (1行スパン) */
+        
+        #btnI { grid-area: 11 / 1 / 12 / 5; } /* 11行目 (1行スパン) */
+        #btnO { grid-area: 12 / 1 / 13 / 5; } /* 12行目 (1行スパン) */
+        
+        /* 電卓ボタン配置（8行目から開始し、1行スパン） */
+        #calc-btn-7 { grid-area: 8 / 1 / 9 / 2; }
+        #calc-btn-8 { grid-area: 8 / 2 / 9 / 3; }
+        #calc-btn-9 { grid-area: 8 / 3 / 9 / 4; }
+        #calc-btn-C { grid-area: 8 / 4 / 9 / 5; } 
+
+        /* 電卓モードでのLP表示エリアの新しい配置 (A3-B5, C3-D5) - CSS定義自体は不要だが、コメントとして残す */
+        /* #calc-lpA-placement { grid-area: 3 / 1 / 6 / 3; } */
+        /* #calc-lpB-placement { grid-area: 3 / 3 / 6 / 5; } */
+
+        /* 電卓ボタン配置（9行目から開始し、1行スパン） */
+        #calc-btn-4 { grid-area: 9 / 1 / 10 / 2; }
+        #calc-btn-5 { grid-area: 9 / 2 / 10 / 3; }
+        #calc-btn-6 { grid-area: 9 / 3 / 10 / 4; }
+        #calc-btn-plus { grid-area: 9 / 4 / 10 / 5; }
+
+        #calc-btn-1 { grid-area: 10 / 1 / 11 / 2; }
+        #calc-btn-2 { grid-area: 10 / 2 / 11 / 3; }
+        #calc-btn-3 { grid-area: 10 / 3 / 11 / 4; }
+        #calc-btn-minus { grid-area: 10 / 4 / 11 / 5; }
+
+        #calc-btn-0 { grid-area: 11 / 1 / 12 / 2; }
+        #calc-btn-00 { grid-area: 11 / 2 / 12 / 3; }
+        #calc-btn-000 { grid-area: 11 / 3 / 12 / 4; }
+        #calc-btn-equals { grid-area: 11 / 4 / 12 / 5; }
+
+        /* BACKボタンは1セル分 (12行目) */
+        #calc-btn-B { grid-area: 12 / 1 / 13 / 5; }
+
+        /* display: none を使用する代わりに hidden 属性の存在で制御します */
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="calculator-grid">
+        
+        <!-- スペーサー: 1行目のみを占有 (常時表示) -->
+        <div id="spacer-top" class="flex justify-center items-center text-xl text-gray-500 font-medium">
+            ENNER-CRAFT CALCULATOR
+        </div>
+
+        <!-- デュエルモードの要素を duel-element クラスでマーク -->
+        
+        <!-- 変数A (自分LP): 2/1 - 5/3 -->
+        <div id="varA-container" class="lp-display duel-element" onclick="enterCalcMode('A')">
+            <span class="lp-label">YOU</span>
+            <span id="varA" class="lp-value">8000</span>
+        </div>
+
+        <!-- 変数B (相手LP): 2/3 - 5/5 -->
+        <div id="varB-container" class="lp-display duel-element" onclick="enterCalcMode('B')">
+            <span class="lp-label">RIVAL</span>
+            <span id="varB" class="lp-value">8000</span>
+        </div>
+
+        <!-- 変数C (カウンター): 5/1 - 6/3 -->
+        <div id="varC-container" class="counter-display duel-element">
+            COUNTER
+            <span id="varC" class="counter-value">0</span>
+        </div>
+
+        <!-- 変数D (要求カウンター数): 5/3 - 6/5 -->
+        <div id="varD-container" class="counter-display duel-element">
+            UNTIL THE LESAL:
+            <span id="varD" class="counter-value">9</span>
+        </div>
+        
+        <!-- P効果ボタン E, F, G, H (6/1 - 8/5) - 縦2行分に拡大 -->
+        <button id="btnE" class="calc-button btn-e duel-element" onclick="pEffect('E')">olgIA</button>
+        <button id="btnF" class="calc-button btn-f duel-element" onclick="pEffect('F')">alazonIA</button>
+        <button id="btnG" class="calc-button btn-g duel-element" onclick="pEffect('G')">tromarIA</button>
+        <button id="btnH" class="calc-button btn-h duel-element" onclick="pEffect('H')">oknirIA</button>
+
+        <!-- ボタンP (CL +1) 8/1 - 10/2 -->
+        <button id="btnP" class="calc-button bg-green-500 hover:bg-green-600 calc-button-large-counter duel-element" onclick="incrementCL()">
+            <span id="varCL-display">0</span>
+        </button>
+        
+        <!-- ボタンM (BURN 900) 8/2 - 9/4 -->
+        <button id="btnM" class="calc-button text-white bg-orange-500 hover:bg-orange-600 duel-element" onclick="burn900()">BURN 900</button>
+        
+        <!-- ボタンQ (CR +1) 8/4 - 10/5 -->
+        <button id="btnQ" class="calc-button bg-green-500 hover:bg-green-600 calc-button-large-counter duel-element" onclick="incrementCR()">
+            <span id="varCR-display">0</span>
+        </button>
+        
+        <!-- ボタンN (エニポリ砲発射！！) 9/2 - 11/4 -->
+        <button id="btnN" class="calc-button text-white btn-enipoli-fire duel-element" onclick="enipoli()">
+            ENNER-POLIS<br>FIRE!!
+        </button>
+        
+        <!-- ボタンR (CL = 0) 10/1 - 11/2 -->
+        <button id="btnR" class="calc-button bg-gray-400 hover:bg-gray-500 duel-element" onclick="resetCL()">
+            R
+        </button>
+        
+        <!-- ボタンS (CR = 0) 10/4 - 11/5 -->
+        <button id="btnS" class="calc-button bg-gray-400 hover:bg-gray-500 duel-element" onclick="resetCR()">
+            R
+        </button>
+        
+        <!-- ボタンI (TURN CHANGE) 11/1 - 12/5 -->
+        <button id="btnI" class="calc-button text-black bg-yellow-400 hover:bg-yellow-500 duel-element" onclick="turnReset()">TURN CHANGE</button>
+        
+        <!-- ボタンO (RESET) 12/1 - 13/5 -->
+        <button id="btnO" class="calc-button text-white bg-blue-600 hover:bg-blue-700 duel-element" onclick="fullReset()">RESET</button>
+        
+        
+        <!-- ------------------------------------
+           電卓モードの要素 (初期は hidden)
+           ------------------------------------ -->
+        
+        <!-- 電卓変数A2 (A6-A7) - 演算子 -->
+        <div id="calc-varA2" class="calc-var-display calc-element hidden">
+            <span id="varA2-symbol">-</span>
+        </div>
+
+        <!-- 電卓変数A3 (B6-D7) - 入力値 -->
+        <div id="calc-varA3" class="calc-var-display calc-element hidden">
+            <span id="varA3-value">0</span>
+        </div>
+
+        <!-- 電卓ボタン群 (8行目から開始し、1行スパン) -->
+        <button id="calc-btn-7" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('7')">7</button>
+        <button id="calc-btn-8" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('8')">8</button>
+        <button id="calc-btn-9" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('9')">9</button>
+        <button id="calc-btn-C" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcOperation('C')">C</button>
+        
+        <button id="calc-btn-4" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('4')">4</button>
+        <button id="calc-btn-5" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('5')">5</button>
+        <button id="calc-btn-6" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('6')">6</button>
+        <button id="calc-btn-plus" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcOperation('+')">+</button>
+
+        <button id="calc-btn-1" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('1')">1</button>
+        <button id="calc-btn-2" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('2')">2</button>
+        <button id="calc-btn-3" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('3')">3</button>
+        <button id="calc-btn-minus" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcOperation('-')">-</button>
+
+        <button id="calc-btn-0" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('0')">0</button>
+        <button id="calc-btn-00" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('00')">00</button>
+        <button id="calc-btn-000" class="calc-button btn-calc-white calc-element hidden" onclick="handleCalcInput('000')">000</button>
+        <button id="calc-btn-equals" class="calc-button btn-calc-orange calc-element hidden" onclick="handleCalcOperation('=')">=</button>
+
+        <button id="calc-btn-B" class="calc-button btn-calc-blue calc-element hidden" onclick="exitCalcMode()">BACK</button>
+    </div>
+
+    <!-- JavaScript ロジック -->
+    <script>
+        // ------------------------------------
+        // 1. 変数と状態の初期値設定
+        // ------------------------------------
+        const INITIAL_LP = 8000;
+        let varA = INITIAL_LP; // 自分LP
+        let varB = INITIAL_LP; // 相手LP
+        let varCL = 0;         // 左のカウンター
+        let varCR = 0;         // 右のカウンター
+        let gameEndState = null; // null:継続, 'WIN':勝利, 'LOSE':敗北
+        let enipoliFiredInSpecialState = false; // エニポリ砲が特殊な状態で発射されたか
+
+        // P効果ボタンE, F, G, Hが押されたかどうかの状態を保持
+        let pEffectUsed = {
+            'E': false,
+            'F': false,
+            'G': false,
+            'H': false
+        };
+
+        // --- 電卓モードの新しい状態 ---
+        let currentMode = 'DUEL'; // 'DUEL' or 'CALCULATOR'
+        let calculatorTarget = null; // 'A' or 'B' (現在編集対象のLP変数)
+        let calcA2 = 2; // 電卓変数A2: 1='+', 2='-' (初期値を2['-']に変更)
+        let calcA3 = 0; // 電卓変数A3: 入力値 (初期値は0)
+        
+        // ゲーム終了時に非活性化するボタンのIDリスト
+        const GAME_END_BUTTONS = ['btnE', 'btnF', 'btnG', 'btnH', 'btnP', 'btnQ', 'btnR', 'btnS', 'btnM', 'btnN', 'btnI'];
+
+
+        // ------------------------------------
+        // 2. 表示更新関数
+        // ------------------------------------
+
+        /**
+         * LPの値に応じて表示色を計算する (緑-黄-赤-黒のグラデーション)。
+         */
+        function getLPColor(value) {
+            // LPを0から8000+の値として正規化し、色を計算する。
+            const maxLP = 8000;
+            const val = Math.max(0, value);
+
+            // 8000以上: 緑 (固定)
+            if (val >= maxLP) return 'rgb(16, 185, 129)'; // Tailwind green-500
+
+            // 8000-4000: 緑 (16, 185, 129) -> 黄 (245, 158, 11)
+            if (val > 4000) {
+                const ratio = (val - 4000) / (maxLP - 4000); // 0 (4000) to 1 (8000)
+                const r = Math.round(16 + (245 - 16) * (1 - ratio));
+                const g = Math.round(185 + (158 - 185) * (1 - ratio));
+                const b = Math.round(129 + (11 - 129) * (1 - ratio));
+                return `rgb(${r}, ${g}, ${b})`;
+            }
+
+            // 4000-2000: 黄 (245, 158, 11) -> 赤 (239, 68, 68)
+            if (val > 2000) {
+                const ratio = (val - 2000) / (4000 - 2000); // 0 (2000) to 1 (4000)
+                const r = Math.round(239 + (245 - 239) * ratio);
+                const g = Math.round(68 + (158 - 68) * ratio);
+                const b = Math.round(68 + (11 - 68) * ratio);
+                return `rgb(${r}, ${g}, ${b})`;
+            }
+            
+            // 2000-0: 赤 (239, 68, 68) -> 黒 (0, 0, 0)
+            if (val > 0) {
+                const ratio = val / 2000; // 0 (0) to 1 (2000)
+                const r = Math.round(0 + (239 - 0) * ratio);
+                const g = Math.round(0 + (68 - 0) * ratio);
+                const b = Math.round(0 + (68 - 0) * ratio);
+                return `rgb(${r}, ${g}, ${b})`;
+            }
+
+            // 0: 黒 (固定)
+            return 'rgb(0, 0, 0)';
+        }
+
+        /**
+         * 変数D (要求カウンター数) の値を計算する。
+         */
+        function calculateVarD() {
+            const currentVarC = varCL + varCR; 
+            // 相手LPが0以下なら、要求数は0
+            const requiredCount = varB <= 0 ? 0 : Math.ceil(varB / 900);
+            const remaining = requiredCount - currentVarC;
+            return Math.max(0, remaining);
+        }
+
+        /**
+         * すべての変数を画面に表示し、ボタンの状態を更新するメインの関数。
+         */
+        function updateDisplay() {
+            // === 0. モード切り替えによる要素表示制御 ===
+            const isDuelMode = currentMode === 'DUEL';
+            
+            // #spacer-top は常に表示するため制御しない
+            const varAContainer = document.getElementById('varA-container');
+            const varBContainer = document.getElementById('varB-container');
+
+            const duelElements = document.querySelectorAll('.duel-element');
+            const calcElements = document.querySelectorAll('.calc-element');
+
+            if (!isDuelMode) {
+                // 電卓モード
+                duelElements.forEach(el => el.classList.add('hidden'));
+                calcElements.forEach(el => el.classList.remove('hidden'));
+
+                
+                // --- 電卓モード特有の表示調整 ---
+                const targetContainer = document.getElementById(`var${calculatorTarget}-container`);
+                const otherTargetContainer = document.getElementById(`var${(calculatorTarget === 'A' ? 'B' : 'A')}-container`);
+
+                targetContainer.classList.remove('hidden');
+                targetContainer.classList.add('calc-lp-display'); 
+                
+                // 変数AまたはBを電卓モードの指定位置に戻す (A3-B5 または C3-D5)
+                if (calculatorTarget === 'A') {
+                    // ★修正: 変数A: A3-B5 の位置に設定 (grid-area: 3 / 1 / 6 / 3)
+                    targetContainer.style.gridArea = '3 / 1 / 6 / 3'; 
+                } else if (calculatorTarget === 'B') {
+                    // ★修正: 変数B: C3-D5 の位置に設定 (grid-area: 3 / 3 / 6 / 5)
+                    targetContainer.style.gridArea = '3 / 3 / 6 / 5'; 
+                }
+                
+                // 他方のLPエリアは非表示
+                otherTargetContainer.classList.add('hidden');
+                // ----------------------------------
+                
+                updateCalculatorDisplay();
+                return;
+            }
+
+            // --- デュエルモードの場合 ---
+            
+            calcElements.forEach(el => el.classList.add('hidden'));
+            
+            // 既に duel-element クラスを持っている要素は hidden を解除
+            duelElements.forEach(el => el.classList.remove('hidden'));
+            
+            // LP表示エリアのクラスと動的スタイルをデュエルモードに戻す
+            varAContainer.classList.remove('calc-lp-display');
+            varBContainer.classList.remove('calc-lp-display');
+            varAContainer.style.gridArea = '2 / 1 / 5 / 3'; // デュエルモード: A2:B4
+            varBContainer.style.gridArea = '2 / 3 / 5 / 5'; // デュエルモード: C2:D4
+            varAContainer.classList.remove('hidden');
+            varBContainer.classList.remove('hidden');
+
+
+            // === 4. LPとカウンターのクリップ処理 ===
+            if (varA < 0) { varA = 0; }
+            if (varB < 0) { varB = 0; }
+            if (varCL < 0) { varCL = 0; }
+            if (varCR < 0) { varCR = 0; }
+            
+            const currentVarC = varCL + varCR;
+            const varD = calculateVarD();
+
+            // === 5. ゲーム終了状態の判定 ===
+            if (gameEndState === null) {
+                if (varB === 0) {
+                    gameEndState = 'WIN';
+                } else if (varA === 0) {
+                    gameEndState = 'LOSE';
+                }
+            }
+            const isGameEnd = gameEndState !== null; // 新しく判定
+
+            // === 6. 変数A/B (LP) の更新 ===
+            const varAValueElement = document.getElementById('varA');
+            const varBValueElement = document.getElementById('varB');
+            
+            varAValueElement.textContent = varA.toLocaleString();
+            varAValueElement.style.color = getLPColor(varA);
+
+            varBValueElement.textContent = varB.toLocaleString();
+            varBValueElement.style.color = getLPColor(varB);
+
+
+            // === 7. 変数C/D (カウンター) の更新とゲーム終了表示 ===
+            document.getElementById('varC').textContent = currentVarC;
+            document.getElementById('varD').textContent = varD;
+
+            document.getElementById('varCL-display').textContent = varCL;
+            document.getElementById('varCR-display').textContent = varCR;
+            
+            const varCContainerLabel = document.getElementById('varC-container').firstChild;
+            const varDContainerLabel = document.getElementById('varD-container').firstChild;
+            
+            if (isGameEnd) {
+                varCContainerLabel.textContent = 'COUNTER'; 
+                varDContainerLabel.textContent = gameEndState === 'WIN' ? 'YOU WIN!' : 'YOU LOSE...';
+                document.getElementById('varD').textContent = '';
+            } else {
+                varCContainerLabel.textContent = 'COUNTER'; 
+                varDContainerLabel.textContent = 'UNTIL THE LESAL:';
+            }
+
+            // === 8. ボタンの非活性化とスタイル変更 ===
+            GAME_END_BUTTONS.forEach(id => {
+                const button = document.getElementById(id);
+                // RESETボタン(btnO)はリストに含まれていないため、常に有効
+                if (isGameEnd) {
+                    button.disabled = true;
+                    button.classList.add('btn-game-end');
+                } else {
+                    button.disabled = false;
+                    button.classList.remove('btn-game-end');
+                }
+            });
+
+            // P効果ボタン (E, F, G, H) の個別制御 (使用済み)
+            ['E', 'F', 'G', 'H'].forEach(key => {
+                const button = document.getElementById('btn' + key);
+                
+                // ゲーム終了状態に関わらず、使用済みなら disabled-effect を適用
+                if (pEffectUsed[key]) {
+                    button.classList.add('disabled-effect'); 
+                    // ゲーム終了時は disabled-effect に加えて btn-game-end が適用される
+                } else {
+                    button.classList.remove('disabled-effect');
+                }
+            });
+
+
+            // === 9. ボタンN (エニポリ砲) の動的スタイル更新 ===
+            const btnN = document.getElementById('btnN');
+            // 一旦全てのクラスをリセット（btn-game-endは上記で処理済み）
+            btnN.classList.remove('blinking', 'btn-enipoli-fire', 'btn-enipoli-dim');
+
+            if (isGameEnd) {
+                // disabledとbtn-game-endが適用されているため、特別な処理は不要（薄い赤色になる）
+                btnN.classList.add('btn-enipoli-fire'); 
+                btnN.innerHTML = 'ENNER-POLIS<br>FIRE!!'; // 2行表示
+            } else if (enipoliFiredInSpecialState) {
+                btnN.classList.add('btn-enipoli-dim', 'text-white');
+                btnN.innerHTML = 'ENNER-POLIS<br>NOW ON FIRE!!!'; // 2行表示
+            } else if (varD === 0 && varB > 0) {
+                btnN.classList.add('blinking', 'btn-enipoli-fire');
+                btnN.innerHTML = 'ENNER-POLIS<br>NOW ON FIRE!!!'; // 2行表示
+            } else {
+                btnN.classList.add('btn-enipoli-fire', 'text-white');
+                btnN.innerHTML = 'ENNER-POLIS<br>FIRE!!'; // 2行表示
+            }
+            
+            // RESETボタンは常に有効なので、disabledを明示的にfalseにする
+            document.getElementById('btnO').disabled = false;
+        }
+
+        /**
+         * 電卓モード中の表示更新
+         */
+        function updateCalculatorDisplay() {
+            const operatorSymbol = calcA2 === 1 ? '+' : (calcA2 === 2 ? '-' : '?');
+            document.getElementById('varA2-symbol').textContent = operatorSymbol;
+
+            document.getElementById('varA3-value').textContent = calcA3.toLocaleString();
+        }
+
+        // ------------------------------------
+        // 3. デュエルモードの挙動 (イベントハンドラ)
+        // ------------------------------------
+
+        /**
+         * ボタン E, F, G, H (P効果ボタン) の挙動
+         */
+        function pEffect(key) {
+            if (gameEndState !== null || pEffectUsed[key]) return;
+            varA -= 900;
+            pEffectUsed[key] = true;
+            updateDisplay();
+        }
+
+        /**
+         * ボタンI (ターンリセット) の挙動
+         */
+        function turnReset() {
+            if (gameEndState !== null) return;
+            pEffectUsed = { 'E': false, 'F': false, 'G': false, 'H': false };
+            enipoliFiredInSpecialState = false; // ターンリセット時にも特殊発射状態をリセット
+            updateDisplay();
+        }
+        
+        /**
+         * ボタンM (900バーン) の挙動
+         */
+        function burn900() {
+            if (gameEndState !== null) return;
+            varB -= 900;
+            updateDisplay();
+        }
+
+        /**
+         * ボタンN (エニポリ砲発射！！) の挙動
+         */
+        function enipoli() {
+            if (gameEndState !== null) return;
+            
+            const currentVarC = varCL + varCR;
+            const isSpecialState = calculateVarD() === 0 && varB > 0;
+
+            if (isSpecialState) {
+                enipoliFiredInSpecialState = true;
+            }
+            
+            const damage = currentVarC * 900;
+            varB -= damage;
+            
+            varCL = 0; 
+            varCR = 0;
+            pEffectUsed = { 'E': false, 'F': false, 'G': false, 'H': false };
+
+            updateDisplay();
+        }
+        
+        /**
+         * ボタンP: 変数CLを +1 する
+         */
+        function incrementCL() {
+            if (gameEndState !== null) return;
+            varCL += 1;
+            updateDisplay();
+        }
+
+        /**
+         * ボタンQ: 変数CRを +1 する
+         */
+        function incrementCR() {
+            if (gameEndState !== null) return;
+            varCR += 1;
+            updateDisplay();
+        }
+
+        /**
+         * ボタンR: 変数CLを 0 にする
+         */
+        function resetCL() {
+            if (gameEndState !== null) return;
+            varCL = 0;
+            updateDisplay();
+        }
+
+        /**
+         * ボタンS: 変数CRを 0 にする
+         */
+        function resetCR() {
+            if (gameEndState !== null) return;
+            varCR = 0;
+            updateDisplay();
+        }
+
+
+        /**
+         * ボタンO (完全リセット) の挙動
+         */
+        function fullReset() {
+            varA = INITIAL_LP;
+            varB = INITIAL_LP;
+            varCL = 0; 
+            varCR = 0; 
+            gameEndState = null;
+            enipoliFiredInSpecialState = false;
+            // P効果の状態をすべてリセット
+            pEffectUsed = { 'E': false, 'F': false, 'G': false, 'H': false };
+
+            currentMode = 'DUEL'; 
+            calculatorTarget = null;
+            calcA2 = 2; 
+            calcA3 = 0; 
+
+            updateDisplay();
+        }
+
+
+        // ------------------------------------
+        // 4. 電卓モードの制御
+        // ------------------------------------
+
+        /**
+         * 電卓モードに移行する。
+         * @param {'A'|'B'} target - 編集対象のLP変数 ('A' または 'B')
+         */
+        function enterCalcMode(target) {
+            if (gameEndState !== null || currentMode === 'CALCULATOR') return;
+            
+            currentMode = 'CALCULATOR';
+            calculatorTarget = target;
+            calcA2 = 2; 
+            calcA3 = 0; 
+
+            const targetContainer = document.getElementById(`var${calculatorTarget}-container`);
+            targetContainer.classList.remove('duel-element');
+            targetContainer.classList.add('calc-lp-display'); 
+
+            updateDisplay();
+        }
+
+        /**
+         * 電卓モードを終了し、デュエルモードに戻る。
+         */
+        function exitCalcMode() {
+            if (currentMode !== 'CALCULATOR') return;
+
+            const targetContainer = document.getElementById(`var${calculatorTarget}-container`);
+            const otherTargetContainer = document.getElementById(`var${(calculatorTarget === 'A' ? 'B' : 'A')}-container`);
+
+            targetContainer.classList.add('duel-element');
+            targetContainer.classList.remove('calc-lp-display');
+            
+            otherTargetContainer.classList.remove('hidden');
+
+            calcA2 = 2; 
+            calcA3 = 0; 
+
+            currentMode = 'DUEL';
+
+            updateDisplay();
+        }
+
+
+        // ------------------------------------
+        // 5. 電卓ボタンの挙動
+        // ------------------------------------
+
+        /**
+         * 電卓ボタン（数字, 00, 000）の入力処理。
+         */
+        function handleCalcInput(input) {
+            if (currentMode !== 'CALCULATOR') return;
+            
+            let newValue = String(calcA3);
+            
+            if (input.length === 1) { 
+                if (newValue === '0') {
+                    newValue = input;
+                } else {
+                    newValue += input;
+                }
+            } else if (input === '00') {
+                newValue += '00';
+            } else if (input === '000') {
+                newValue += '000';
+            }
+
+            const maxVal = 99999999;
+            const finalValue = Math.min(Number(newValue), maxVal);
+            
+            calcA3 = finalValue;
+            updateCalculatorDisplay();
+        }
+
+        /**
+         * 電卓の操作ボタン (+, -, C, =) の処理。
+         */
+        function handleCalcOperation(operation) {
+            if (currentMode !== 'CALCULATOR') return;
+
+            switch (operation) {
+                case '+':
+                    calcA2 = 1; 
+                    break;
+                case '-':
+                    calcA2 = 2; 
+                    break;
+                case 'C':
+                    calcA3 = 0; 
+                    break;
+                case '=':
+                    let currentLP = (calculatorTarget === 'A') ? varA : varB;
+
+                    if (calcA2 === 1) { 
+                        currentLP += calcA3;
+                    } else if (calcA2 === 2) { 
+                        currentLP -= calcA3;
+                    }
+                    
+                    if (calculatorTarget === 'A') {
+                        varA = currentLP;
+                    } else {
+                        varB = currentLP;
+                    }
+
+                    exitCalcMode();
+                    return; 
+            }
+            updateCalculatorDisplay();
+        }
+
+        // ------------------------------------
+        // 6. 初期化
+        // ------------------------------------
+
+        // ページロード時に実行
+        window.onload = updateDisplay;
+    </script>
+</body>
+</html>
